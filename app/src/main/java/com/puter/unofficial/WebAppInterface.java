@@ -16,6 +16,7 @@ import java.util.Locale;
  * The core bridge class between the HTML JavaScript and Native Android code.
  * Fulfills all requirements for native TTS, barge-in, full-screen voice agent,
  * and authentication persistence.
+ * UPDATED: Added Token handling to resolve session isolation between WebViews.
  */
 public class WebAppInterface {
 
@@ -106,7 +107,7 @@ public class WebAppInterface {
             ((Activity) context).startActivityForResult(Intent.createChooser(intent, "Upload to Puter"), 1);
         });
     }
-    
+
     // --- NEW BRIDGE METHODS ---
 
     /**
@@ -130,23 +131,37 @@ public class WebAppInterface {
         AuthManager.getInstance(context).setLoggedIn(isSignedIn);
     }
     
-    // --- LEGACY AUTH METHODS (NO LONGER USED DIRECTLY) ---
+    /**
+     * NEW: Returns the auth token saved in native storage.
+     * Used by index.html to inject credentials into the main WebView's localStorage.
+     */
+    @JavascriptInterface
+    public String getSavedAuthToken() {
+        return prefs.getString("puter_auth_token", null);
+    }
+
+    /**
+     * NEW: Saves the auth token string to native storage.
+     * This is called by the popup window logic to bridge the token to the main activity.
+     */
+    @JavascriptInterface
+    public void saveAuthToken(String token) {
+        prefs.edit().putString("puter_auth_token", token).apply();
+    }
+
+    // --- LEGACY AUTH METHODS ---
 
     // 6. SIGN IN
-    // NOTE: This is now triggered by JavaScript (puter.auth.signIn()). The native intent is removed.
     @JavascriptInterface
     public void signIn() {
-        // Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://puter.com/login"));
-        // context.startActivity(intent);
-        // This is intentionally left blank. Auth is now handled by the SDK in the WebView.
+        // Auth is now handled by the SDK in the WebView using MyWebChromeClient.
     }
 
     // 7. SIGN OUT
-    // NOTE: This is now triggered by JavaScript (puter.auth.signOut()).
     @JavascriptInterface
     public void signOut() {
-        // The primary sign-out is handled by the SDK. This bridge method is kept
-        // in case the JS needs to notify the native side to perform additional tasks.
+        // Clear native token storage on sign out
+        prefs.edit().remove("puter_auth_token").apply();
         AuthManager.getInstance(context).logout();
         ((Activity) context).runOnUiThread(() -> {
             Toast.makeText(context, "Signed out", Toast.LENGTH_SHORT).show();
