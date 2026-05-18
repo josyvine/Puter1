@@ -457,6 +457,7 @@
             }
             if (puter.auth.isSignedIn()) {
                 await puter.auth.signOut();
+                localStorage.removeItem('puter_token'); // Clear local injection
                 appendChat("System", "You have been signed out.");
                 updateAuthUI();
             } else {
@@ -469,13 +470,27 @@
     }
 
     /**
+     * UPDATED: Added session injection from Native side to fix the isolation bug.
+     * This manually sets the token in the main WebView before Puter.js checks for it.
+     */
+    function syncAuthSession() {
+        if (window.AndroidInterface) {
+            const token = window.AndroidInterface.getSavedAuthToken();
+            if (token && token !== "null") {
+                console.log("Bridging session token from Native to Web.");
+                localStorage.setItem('puter_token', token);
+            }
+        }
+    }
+
+    /**
      * UPDATED: Added a status guard (lastAuthStatus) to prevent the "UI Blinking" reload loop.
      * Only triggers a native status change if the login state actually flips.
      */
     function updateAuthUI() {
       if (typeof puter !== 'undefined' && window.AndroidInterface) {
         const logged = puter.auth.isSignedIn();
-        
+
         // Prevent redundant native calls that cause reloads
         if (logged === lastAuthStatus) return;
         lastAuthStatus = logged;
@@ -517,9 +532,13 @@
 
     // Execute immediately on load
     window.onload = () => {
+        // 1. Sync session from Native before SDK initializes
+        syncAuthSession();
+
+        // 2. Load UI elements
         loadModels();
         document.getElementById('customInput').value = customInstruction;
-        
+
         if (typeof puter !== 'undefined') {
             puter.ready(() => {
                 console.log("Puter SDK is ready.");
