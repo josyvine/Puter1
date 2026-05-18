@@ -8,10 +8,13 @@ import android.os.Message;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.RelativeLayout;
 
 import androidx.core.content.FileProvider;
@@ -47,10 +50,10 @@ public class MyWebChromeClient extends WebChromeClient {
     @Override
     public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
         WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
-        
+
         // Create a new WebView for the popup
         final WebView popupWebView = new WebView(activity);
-        
+
         // Configure the popup WebView
         WebSettings webSettings = popupWebView.getSettings();
         webSettings.setJavaScriptEnabled(true);
@@ -64,11 +67,42 @@ public class MyWebChromeClient extends WebChromeClient {
         String userAgent = webSettings.getUserAgentString();
         userAgent = userAgent.replace("; wv", "");
         webSettings.setUserAgentString(userAgent);
-        
-        // Use the same client to handle redirects within the popup
-        popupWebView.setWebViewClient(new PuterWebViewClient(activity));
 
-        // Let the popup handle its own closing when Puter finishes auth
+        // FIX FOR HANGING SIGN-IN: Enable Third-Party Cookies so the session saves
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(popupWebView, true);
+
+        // FIX FOR HANGING SIGN-IN: Actively monitor the popup URL to detect success
+        popupWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                Log.d(AppConstants.TAG_AUTH, "Popup URL: " + url);
+
+                // The moment Puter hits the success token, we manually kill the popup
+                if (url.contains(AppConstants.AUTH_TOKEN_PARAM) || url.contains(AppConstants.AUTH_SUCCESS_MARKER) || url.contains("auth_success")) {
+                    Log.i(AppConstants.TAG_AUTH, "Auth success detected! Manually closing popup.");
+
+                    CookieManager.getInstance().flush(); // Save cookies immediately
+                    AuthManager.getInstance(activity).setLoggedIn(true); // Save state
+
+                    // Kill the dialog
+                    if (authDialog != null && authDialog.isShowing()) {
+                        authDialog.dismiss();
+                        authDialog = null;
+                    }
+
+                    // Refresh the main app screen so it logs in
+                    if (activity instanceof MainActivity) {
+                        ((MainActivity) activity).reloadWebView();
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        // Let the popup handle its own closing if the SDK tries to close it via JS
         popupWebView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onCloseWindow(WebView window) {
@@ -83,12 +117,12 @@ public class MyWebChromeClient extends WebChromeClient {
         authDialog = new Dialog(activity, android.R.style.Theme_DeviceDefault_NoActionBar);
         authDialog.setContentView(popupWebView);
         authDialog.show();
-        
+
         // Set the new WebView as the target for the transport
         transport.setWebView(popupWebView);
         resultMsg.sendToTarget();
-        
-        Log.d(AppConstants.TAG_AUTH, "onCreateWindow: Handled Puter auth popup with User-Agent fix.");
+
+        Log.d(AppConstants.TAG_AUTH, "onCreateWindow: Handled Puter auth popup with User-Agent & Cookie fix.");
         return true;
     }
 
