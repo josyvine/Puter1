@@ -17,7 +17,8 @@ public class AppConstants {
     public static final String PUTER_LOGIN_URL = "https://puter.com/login";
     
     // The local asset path for the app frontend.
-    public static final String LOCAL_INDEX_URL = "file:///android_asset/index.html";
+    // UPDATED: Now uses the virtual HTTPS origin required for Puter.js session persistence.
+    public static final String LOCAL_INDEX_URL = "https://appassets.androidplatform.net/assets/index.html";
     
     // Markers for detecting successful SDK authentication redirects
     public static final String AUTH_SUCCESS_MARKER = "signed_in=true";
