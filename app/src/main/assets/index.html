@@ -626,10 +626,15 @@
       });
 
       // FIX: CRITICAL PAYLOAD STRUCTURE FOR SDK
-      // Instead of sending the content array directly, we must wrap it in a proper message object.
-      let finalPayload = contentBlocks;
+      // We MUST wrap the array in a proper message object so the SDK doesn't throw the 'content' error.
+      let finalPayload;
       if (contentBlocks.length === 1 && contentBlocks[0].type === "text") {
           finalPayload = text; // Keep simple text simple
+      } else {
+          finalPayload = [{
+              role: 'user',
+              content: contentBlocks
+          }];
       }
 
       const loader = document.getElementById('ecgLoader');
