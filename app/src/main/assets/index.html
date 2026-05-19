@@ -457,11 +457,33 @@
 
     /**
      * Requirement #7 - Live Fetch Implementation
+     * FIXED: Normalizes live API response into same ARRAY structure as local JSON.
      */
     async function loadLiveModels() {
         try {
             document.getElementById('selectedModelText').textContent = "Syncing live models...";
-            const raw = await (puter.ai.models ? puter.ai.models() : puter.ai.listModels());
+            
+            const response = await (
+                puter.ai.listModels
+                    ? puter.ai.listModels()
+                    : puter.ai.models()
+            );
+
+            console.log("LIVE RESPONSE:", response);
+
+            let raw = [];
+
+            if (Array.isArray(response)) {
+                raw = response;
+            }
+            else if (Array.isArray(response.models)) {
+                raw = response.models;
+            }
+            else {
+                // If keyed by provider/vendor, extract and flatten
+                raw = Object.values(response).flat();
+            }
+
             const grouped = normalizeModels(raw);
             localStorage.setItem("puter_live_models", JSON.stringify(grouped));
             renderModelAccordion(grouped);
