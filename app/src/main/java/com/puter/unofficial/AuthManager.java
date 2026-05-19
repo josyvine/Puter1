@@ -8,12 +8,12 @@ import android.content.SharedPreferences;
  * This class ensures that once a user signs in via the browser, the app 
  * remembers that state across restarts using SharedPreferences.
  * 
- * DEEP ANALYSIS UPDATE: 
- * With the migration to WebViewAssetLoader (HTTPS origin), primary 
- * session persistence is now handled natively by the WebView's cookie 
- * and storage engine. This class now acts as a native synchronization 
- * layer to ensure the Android UI and Splash Screen are aware of the state 
- * without waiting for the JavaScript SDK to initialize.
+ * CORE ANALYSIS UPDATE: 
+ * Following the identification of the "OAuth Interruption" bug, this class 
+ * has been transitioned to a "Mirror State" architecture. It no longer 
+ * dictates the session state; instead, it synchronizes with the Puter.js 
+ * SDK to ensure the Native Android UI and Splash Screen are consistent 
+ * with the real Web session.
  */
 public class AuthManager {
 
@@ -47,8 +47,9 @@ public class AuthManager {
 
     /**
      * Saves the current authentication status.
-     * This is called by the MainActivity or the Bridge when a successful 
-     * login is detected or intercepted from the browser redirect.
+     * CORE FIX: This is now only called by the JavaScript SDK via the 
+     * onAuthStatusChanged bridge. This ensures Native state never 
+     * gets ahead of the REAL Puter session state.
      * 
      * @param status true if the user is authenticated, false otherwise.
      */
@@ -58,8 +59,7 @@ public class AuthManager {
 
     /**
      * Checks if the user is currently considered logged in.
-     * The SplashActivity uses this to skip the sign-in flow, 
-     * and the HTML frontend uses this to show "Sign Out".
+     * Used by SplashActivity and Fragments to determine the initial UI layout.
      * 
      * @return true if status is saved as logged in.
      */
@@ -69,8 +69,7 @@ public class AuthManager {
 
     /**
      * Persists the authentication token string extracted from the login popup.
-     * Note: In the new HTTPS architecture, this acts as a backup record 
-     * rather than a primary injection source.
+     * Used as a secondary backup to the browser's native cookie storage.
      * 
      * @param token The session token string.
      */
@@ -90,7 +89,7 @@ public class AuthManager {
     /**
      * Clears the authentication state.
      * Triggered when the user selects "Sign Out" from the HTML dropdown menu.
-     * This ensures both the boolean flag and the token are wiped.
+     * Ensures both the mirror flag and the backup token are removed.
      */
     public void logout() {
         prefs.edit()
@@ -101,10 +100,10 @@ public class AuthManager {
 
     /**
      * Helper to verify if a specific URL is a Puter authentication success callback.
-     * This logic is used by the WebViewClient to detect when the user has 
-     * finished signing in on the browser and has been redirected back.
+     * This logic is used by the WebViewClient and ChromeClient to detect when 
+     * the OAuth flow has reached its completion phase.
      * 
-     * UPDATED: Includes detection for both token params and signed_in markers.
+     * UPDATED: Aligned with the deep analysis to capture all redirect success markers.
      * 
      * @param url The URL being intercepted in the WebView.
      * @return true if the URL indicates a successful authentication.
@@ -114,11 +113,11 @@ public class AuthManager {
 
         /* 
          * Puter typically redirects back to the main domain or a custom 
-         * callback URL after login. We check for multiple success markers
-         * to ensure compatibility with different SDK versions.
+         * callback URL after login. We check for all known success markers.
          */
         return (url.contains(AppConstants.AUTH_TOKEN_PARAM) || 
                 url.contains(AppConstants.AUTH_SUCCESS_MARKER) ||
+                url.contains("auth_success") ||
                 url.contains("signed_in=true"));
     }
 }
