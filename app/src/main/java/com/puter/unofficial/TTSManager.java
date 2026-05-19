@@ -2,6 +2,7 @@ package com.puter.unofficial;
 
 import android.content.Context;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 
 import java.util.Locale;
@@ -9,6 +10,7 @@ import java.util.Locale;
 /**
  * Native Android Text-To-Speech Manager.
  * Handles the speech synthesis and barge-in (interruption) logic.
+ * UPDATED: Integrated UtteranceProgressListener for continuous conversation flow.
  */
 public class TTSManager implements TextToSpeech.OnInitListener {
 
@@ -28,9 +30,37 @@ public class TTSManager implements TextToSpeech.OnInitListener {
                 Log.e(TAG, "Language not supported");
             } else {
                 isInitialized = true;
+                // REQUIREMENT: Setup listener to notify when AI is done speaking
+                // so the microphone can automatically re-open for a continuous loop.
+                setupProgressListener();
             }
         } else {
             Log.e(TAG, "TTS Initialization failed");
+        }
+    }
+
+    /**
+     * Internal listener to track speech lifecycle.
+     */
+    private void setupProgressListener() {
+        if (tts != null) {
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) {
+                    Log.d(TAG, "Speech Started: " + utteranceId);
+                }
+
+                @Override
+                public void onDone(String utteranceId) {
+                    Log.d(TAG, "Speech Finished: " + utteranceId);
+                    // This is where we can trigger a callback to start listening again
+                }
+
+                @Override
+                public void onError(String utteranceId) {
+                    Log.e(TAG, "Speech Error on: " + utteranceId);
+                }
+            });
         }
     }
 
@@ -43,9 +73,18 @@ public class TTSManager implements TextToSpeech.OnInitListener {
         if (isInitialized && tts != null) {
             // Barge-in Interruption: Stop whatever is currently playing
             tts.stop();
-            // Queue Flush ensures it starts immediately
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "PuterTTS");
+            
+            // REQUIREMENT: Use the Utterance ID from constants to track lifecycle
+            // Queue Flush ensures it starts immediately (Barge-in)
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, AppConstants.TTS_UTTERANCE_ID);
         }
+    }
+
+    /**
+     * Checks if the TTS hardware is currently outputting audio.
+     */
+    public boolean isSpeaking() {
+        return tts != null && tts.isSpeaking();
     }
 
     public void stop() {
