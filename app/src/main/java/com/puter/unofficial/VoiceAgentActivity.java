@@ -42,7 +42,7 @@ public class VoiceAgentActivity extends AppCompatActivity {
 
     private boolean isListening = false;
     private boolean isAIspeaking = false;
-    
+
     // Handler for managing hardware sync delays
     private final Handler hardwareHandler = new Handler(Looper.getMainLooper());
 
@@ -91,7 +91,7 @@ public class VoiceAgentActivity extends AppCompatActivity {
             public void onStart(String utteranceId) {
                 isAIspeaking = true;
                 runOnUiThread(() -> tvStatus.setText("Puter is speaking..."));
-                
+
                 // REQUIREMENT #2: Start listening IMMEDIATELY when AI starts talking
                 // This allows the user to interrupt (Barge-in) at any time.
                 runOnUiThread(() -> startListening());
@@ -101,13 +101,6 @@ public class VoiceAgentActivity extends AppCompatActivity {
             public void onDone(String utteranceId) {
                 isAIspeaking = false;
                 // CONTINUOUS FLOW: Re-open mic to wait for next user command
-                runOnUiThread(() -> startListening());
-            }
-
-            @Override
-            public void onFinish(String utteranceId, boolean interrupted) {
-                super.onFinish(utteranceId, interrupted);
-                isAIspeaking = false;
                 runOnUiThread(() -> startListening());
             }
 
@@ -135,7 +128,7 @@ public class VoiceAgentActivity extends AppCompatActivity {
                     Log.d(TAG, "Barge-in: Voice detected - performing hardware reset.");
                     tts.stop();
                     isAIspeaking = false;
-                    
+
                     /* 
                      * REQUIREMENT: Reset the audio buffer immediately.
                      * We cycle the recognizer to ensure that the AI's audio residue 
@@ -169,9 +162,9 @@ public class VoiceAgentActivity extends AppCompatActivity {
                 if (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || 
                     error == SpeechRecognizer.ERROR_NO_MATCH || 
                     error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
-                    
+
                     Log.d(TAG, "Mic glitch/timeout (Error Code: " + error + ") - performing aggressive restart...");
-                    
+
                     // Cleanup and restart
                     speechRecognizer.cancel();
                     hardwareHandler.postDelayed(() -> startListening(), 100);
@@ -198,7 +191,7 @@ public class VoiceAgentActivity extends AppCompatActivity {
                 if (matches != null && !matches.isEmpty()) {
                     String partial = matches.get(0);
                     tvTranscript.setText(partial);
-                    
+
                     // Live Barge-in: Stop AI as soon as user starts speaking first few words
                     if (tts != null && tts.isSpeaking() && partial.trim().length() > 0) {
                         Log.d(TAG, "Partial voice detected - silencing AI.");
