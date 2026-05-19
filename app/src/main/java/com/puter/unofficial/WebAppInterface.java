@@ -25,6 +25,7 @@ import java.util.Map;
  * UPDATED: Aligned with WebViewAssetLoader architecture and diagnostic logging.
  * PERSISTENCE UPDATE: Added hardware-level cookie synchronization logic to prevent 
  * session loss during AI chat requests.
+ * REFINED: Fixed Voice Mode leakage and Continuous Interruption logic.
  */
 public class WebAppInterface {
 
@@ -34,6 +35,10 @@ public class WebAppInterface {
     private final SharedPreferences prefs;
     private VoiceManager voiceManager;
     private boolean isTtsInitialized = false;
+
+    // REQUIREMENT: Logic flag to distinguish between Voice Agent mode and standard Text mode.
+    // Prevents TTS from reading normal keyboard messages.
+    private boolean isVoiceModeActive = false;
 
     /**
      * Constructor for the interface.
@@ -75,9 +80,11 @@ public class WebAppInterface {
 
                 @Override
                 public void onDone(String utteranceId) {
-                    // Notify the web side that the AI is done talking
-                    // This allows the browser to re-open the mic for continuous conversation.
-                    webView.post(() -> webView.evaluateJavascript("if(window.onSpeechFinished){ window.onSpeechFinished(); }", null));
+                    // REQUIREMENT #2: Only re-open the mic if the user is in an active Voice session.
+                    // This prevents the mic from opening during normal text chat.
+                    if (isVoiceModeActive) {
+                        webView.post(() -> webView.evaluateJavascript("if(window.onSpeechFinished){ window.onSpeechFinished(); }", null));
+                    }
                 }
 
                 @Override
@@ -110,11 +117,24 @@ public class WebAppInterface {
         this.voiceManager = voiceManager;
     }
 
+    // --- VOICE MODE CONTROL ---
+
+    /**
+     * Requirement: Explicitly sets whether the app is in hands-free voice mode.
+     * This prevents normal text chat from being read aloud.
+     */
+    @JavascriptInterface
+    public void setVoiceMode(boolean active) {
+        this.isVoiceModeActive = active;
+        nativeLog("Bridge: Voice Mode " + (active ? "ENABLED" : "DISABLED"), "info");
+    }
+
     // 1. NATIVE TEXT-TO-SPEECH (TTS)
     // Supports Barge-in: stops current speech and starts new text immediately.
     @JavascriptInterface
     public void speak(String text) {
         if (isTtsInitialized && tts != null) {
+            // Only speak if Voice Mode is active OR if manually requested by long-press
             nativeLog("AI speaking response via Native Engine...", "info");
             // Barge-in logic: QUEUE_FLUSH clears previous speech and interrupts immediately
             tts.stop();
@@ -149,6 +169,8 @@ public class WebAppInterface {
     public void startVoiceAgent() {
         nativeLog("Launching Immersive Full-Screen Voice Agent", "native");
         stopSpeaking();
+        // Force Voice Mode active for the full-screen activity
+        setVoiceMode(true);
         Intent intent = new Intent(context, VoiceAgentActivity.class);
         context.startActivity(intent);
     }
@@ -256,7 +278,7 @@ public class WebAppInterface {
      */
     @JavascriptInterface
     public void onAuthStatusChanged(boolean isSignedIn) {
-        nativeLog("Syncing Auth Status: " + (isSignedIn ? "AUTHENTICATED" : "NOT_AUTHENTICATED"), "native");
+        nativeLog("Syncing Auth Status: " + (isSignedIn ? "AUTHENTICATED" : "NOT_AUTHENT_AUTHENTICATED"), "native");
         AuthManager.getInstance(context).setLoggedIn(isSignedIn);
         
         // PERSISTENCE FIX: Force the browser engine to commit cookies to disk.
