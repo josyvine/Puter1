@@ -15,6 +15,11 @@ public class AppConstants {
     // NEW: Key for local chat history persistence (Enhancement #4)
     public static final String KEY_CHAT_HISTORY = "puter_chat_history";
     
+    // REQUIREMENT #3: Keys for Multi-Session Management
+    // Tracks the current active session ID and the list/map of all saved sessions.
+    public static final String KEY_SESSIONS_LIST = "puter_sessions_list";
+    public static final String KEY_ACTIVE_SESSION_ID = "puter_active_session_id";
+    
     // NEW: Key for toggling between local models.json and Puter Live API (Requirement #7)
     public static final String KEY_USE_LIVE_MODELS = "use_live_models";
 
