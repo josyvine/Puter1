@@ -169,6 +169,24 @@ public class WebAppInterface {
     }
 
     /**
+     * NEW: Retrieves the saved preference for model fetching (Local vs Live).
+     */
+    @JavascriptInterface
+    public boolean getModelSource() {
+        return prefs.getBoolean(AppConstants.KEY_USE_LIVE_MODELS, false);
+    }
+
+    /**
+     * NEW: Saves the user's preference for model fetching.
+     * @param isLive True for Live API, False for Local JSON.
+     */
+    @JavascriptInterface
+    public void setModelSource(boolean isLive) {
+        prefs.edit().putBoolean(AppConstants.KEY_USE_LIVE_MODELS, isLive).apply();
+        nativeLog("Model Source changed to: " + (isLive ? "LIVE" : "LOCAL"), "native");
+    }
+
+    /**
      * Syncs the Puter SDK's real-time auth status with the Native AuthManager.
      * PERSISTENCE FIX: Forces hardware-level cookie flush to ensure session stability
      * so that the state remains valid during sending messages or using the mic.
