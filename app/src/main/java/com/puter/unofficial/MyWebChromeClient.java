@@ -33,6 +33,7 @@ import java.util.Locale;
  * Handles the native file upload functionality (Camera, Gallery, File Picker)
  * for the WebView, enabling Base64 upload support for Puter AI interactions.
  * UPDATED: Added Console Message interception and moved to HTTPS Origin for persistence.
+ * CORE FIX: Prevented OAuth interruption by allowing final redirects to load.
  */
 public class MyWebChromeClient extends WebChromeClient {
 
@@ -116,7 +117,6 @@ public class MyWebChromeClient extends WebChromeClient {
         CookieManager.getInstance().setAcceptThirdPartyCookies(popupWebView, true);
 
         // 4. Monitor the popup for URL changes.
-        // HACK REMOVED: No more token extraction. We trust the shared HTTPS origin.
         popupWebView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -131,10 +131,18 @@ public class MyWebChromeClient extends WebChromeClient {
                     
                     if (!isAuthProcessing) {
                         isAuthProcessing = true;
-                        triggerNativeLog("Auth marker found in URL. Finalizing...", "native");
-                        closeAuthAndRefresh(); 
+                        
+                        triggerNativeLog("Auth marker found. Waiting for session persistence...", "native");
+
+                        // CORE FIX: Delay closure and return FALSE to allow the redirect to finalize.
+                        // This allows Puter to finish writing cookies/localStorage.
+                        view.postDelayed(() -> {
+                            CookieManager.getInstance().flush();
+                            closeAuthAndRefresh();
+                        }, 2000);
                     }
-                    return true;
+                    // Return false to allow the URL to load and finalize the SDK session
+                    return false;
                 }
                 return false;
             }
@@ -175,31 +183,29 @@ public class MyWebChromeClient extends WebChromeClient {
      */
     private void triggerNativeLog(String msg, String type) {
         Log.d("PuterPopupTrace", msg);
-        // This helps the user see what's happening inside the hidden activities
     }
 
     /**
      * Helper method to finalize authentication, dismiss popup, and refresh main UI.
-     * UPDATED: Now uses evaluation to call updateAuthUI() instead of a full reload.
+     * CORE FIX: Removed the fake native auth.setLoggedIn(true) call.
+     * TRUSTED SOURCE: We now rely on the JS SDK to report the status.
      */
     private void closeAuthAndRefresh() {
         CookieManager.getInstance().flush(); 
-        
-        AuthManager auth = AuthManager.getInstance(activity);
-        auth.setLoggedIn(true);
         
         if (authDialog != null && authDialog.isShowing()) {
             authDialog.dismiss();
             authDialog = null;
         }
 
-        // Notify the main WebView to check the Puter SDK state immediately
+        // Notify the main WebView to check the Puter SDK state
         if (activity instanceof MainActivity) {
             final WebView mainView = activity.findViewById(R.id.webView);
             if (mainView != null) {
-                mainView.post(() -> {
+                // CORE FIX: Added delay before checking status to ensure SDK is initialized
+                mainView.postDelayed(() -> {
                     mainView.evaluateJavascript("if(window.updateAuthUI){ window.updateAuthUI(); }", null);
-                });
+                }, 1500);
             }
         }
     }
