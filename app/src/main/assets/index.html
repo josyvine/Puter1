@@ -7,7 +7,7 @@
   <title>Puter Unofficial</title>
   <!-- DIAGNOSTIC CONSOLE: Must load first to capture all events -->
   <script src="debug_console.js"></script>
-  <!-- FIX 1: Removed 'async' to ensure SDK is available for initialization logic -->
+  <!-- FIX 1: Removed 'async' to ensure the SDK is available for synchronous initialization -->
   <script src="https://js.puter.com/v2/"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@4.0.0/marked.min.js"></script>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
@@ -166,7 +166,6 @@
   </header>
 
   <div class="settings-container" id="settingsBar">
-    <!-- REPLACED <select> WITH CUSTOM ACCORDION UI -->
     <div class="custom-select-container">
       <div id="modelSelectTrigger" class="custom-select-trigger" onclick="toggleAccordionMenu()">
         <span id="selectedModelText">Loading models...</span>
@@ -338,17 +337,8 @@
      */
     function normalizeModels(rawModels) {
         if (!rawModels) return {};
-        
-        // --- REPLACEMENT 3 ---
-        if (rawModels?.models) {
-            rawModels = rawModels.models;
-        }
-
-        if (!Array.isArray(rawModels)) {
-            console.error("Invalid models response:", rawModels);
-            return {};
-        }
-        // ----------------------
+        // If already grouped (Local JSON format)
+        if (!Array.isArray(rawModels)) return rawModels;
 
         const grouped = {};
         rawModels.filter(m => m && m.id).forEach(model => {
@@ -446,28 +436,18 @@
                 const cached = localStorage.getItem("puter_live_models");
                 if (cached) renderModelAccordion(JSON.parse(cached));
                 
-                // --- REPLACEMENT 2 ---
-                if (typeof puter !== 'undefined' && puter.auth) {
-                    try {
-                        const user = await puter.auth.getUser();
-                        if (user) {
-                            await loadLiveModels();
-                        } else {
-                            document.getElementById('selectedModelText')
-                                .textContent = "Sign in for Live Models";
-                        }
-                    } catch (e) {
-                        console.error("Auth validation failed:", e);
-                        document.getElementById('selectedModelText')
-                            .textContent = "Authentication failed";
-                    }
+                // Fetch fresh if authenticated
+                if (typeof puter !== 'undefined' && puter.auth.isSignedIn()) {
+                    loadLiveModels();
+                } else {
+                    document.getElementById('selectedModelText').textContent = "Sign in for Live Models";
                 }
-                // ---------------------
-
             } else {
                 const jsonString = window.AndroidInterface.getLocalJson("models.json");
                 if (!jsonString || jsonString === "{}") throw new Error("Local models missing");
-                renderModelAccordion(JSON.parse(jsonString));
+                // SAFETY FIX: Pass through normalization to ensure consistent rendering structure
+                const localData = normalizeModels(JSON.parse(jsonString));
+                renderModelAccordion(localData);
             }
         } catch(e) {
             console.error("Model load failed:", e);
@@ -478,67 +458,17 @@
     /**
      * Requirement #7 - Live Fetch Implementation
      */
-    // --- REPLACEMENT 1 ---
     async function loadLiveModels() {
         try {
-            document.getElementById('selectedModelText')
-                .textContent = "Fetching live models...";
-
-            // Wait a bit after OAuth redirect
-            await new Promise(r => setTimeout(r, 1200));
-
-            // HARD auth validation
-            const user = await puter.auth.getUser();
-
-            if (!user) {
-                document.getElementById('selectedModelText')
-                    .textContent = "Sign in required";
-                return;
-            }
-
-            console.log("Authenticated User:", user);
-
-            // ONLY use listModels()
-            let raw = await puter.ai.listModels();
-
-            console.log("RAW MODELS:", raw);
-
-            // SDK compatibility
-            if (raw?.models) {
-                raw = raw.models;
-            }
-
-            if (!Array.isArray(raw)) {
-                throw new Error("Invalid model response");
-            }
-
-            if (raw.length === 0) {
-                throw new Error("No models returned");
-            }
-
+            document.getElementById('selectedModelText').textContent = "Syncing live models...";
+            const raw = await (puter.ai.models ? puter.ai.models() : puter.ai.listModels());
             const grouped = normalizeModels(raw);
-
-            localStorage.setItem(
-                "puter_live_models",
-                JSON.stringify(grouped)
-            );
-
+            localStorage.setItem("puter_live_models", JSON.stringify(grouped));
             renderModelAccordion(grouped);
-            console.log("Live models loaded");
-
         } catch (err) {
-            console.error("Live model fetch failed:", err);
-            document.getElementById('selectedModelText')
-                .textContent = "Live models failed";
-
-            appendChat(
-                "System",
-                "Live Model Error: " +
-                (err?.message || JSON.stringify(err))
-            );
+            console.error("Live Fetch failed:", err);
         }
     }
-    // ---------------------
 
     function toggleModelSource() {
         isLiveMode = !isLiveMode;
@@ -552,7 +482,10 @@
      */
     function normalizeAIResponse(content) {
         if (!content) return "";
+        // Already text
         if (typeof content === "string") return content;
+
+        // Claude array blocks
         if (Array.isArray(content)) {
             return content.map(item => {
                 if (typeof item === "string") return item;
@@ -560,10 +493,13 @@
                 return JSON.stringify(item);
             }).join("\n");
         }
+
+        // Object fallback
         if (typeof content === "object") {
             if (content.text) return content.text;
             return JSON.stringify(content);
         }
+
         return String(content);
     }
 
@@ -606,7 +542,7 @@
         console.log("Requesting AI Response for model: " + model);
         const resp = await puter.ai.chat(content, {model: model, system_message: customInstruction});
         
-        // FIX 2: Apply normalization to the response content (Claude Array Fix)
+        // FIX 2: Apply normalization to the response content (Claude Fix)
         const botMsg = normalizeAIResponse(resp.message.content);
 
         // HIDE ECG LOADER
@@ -645,7 +581,7 @@
       div.onpointercancel = () => clearTimeout(pressTimer);
       div.oncontextmenu = (e) => e.preventDefault(); // Disable system context menu
 
-      // FIX 2: Safe String conversion for marked.parse
+      // Safe String conversion for marked.parse
       div.innerHTML = `<div class="message-content"><b>${sender}:</b><br>${marked.parse(String(text || ""))}</div>`;
       log.appendChild(div);
       
@@ -778,7 +714,7 @@
         lastAuthStatus = logged;
         document.getElementById('authOption').textContent = logged ? "Sign Out" : "Sign In";
         
-        // Requirement #7 - Automatically fetch live models on sign-in if enabled
+        // Automatically fetch live models on sign-in if enabled
         if (logged && isLiveMode) loadLiveModels();
 
         window.AndroidInterface.onAuthStatusChanged(logged);
@@ -821,27 +757,26 @@
       document.getElementById('imagePreview').style.display = 'none';
     }
 
-    // --- REPLACEMENT 4 ---
-    window.onload = async () => {
-        console.log("Page Lifecycle: ONLOAD");
-
+    // Execute immediately on load
+    window.onload = () => {
+        console.log("Page Lifecycle: ONLOAD on Secure Origin");
+        
         syncAuthSession();
         loadSavedHistory();
         document.getElementById('customInput').value = customInstruction;
 
         if (typeof puter !== 'undefined') {
-            console.log("Waiting for Puter SDK...");
-            puter.ready(async () => {
-                console.log("Puter SDK Ready");
-
-                // IMPORTANT FIX
-                await new Promise(r => setTimeout(r, 1500));
-
+            console.log("Puter SDK detected. Waiting for ready signal...");
+            puter.ready(() => {
+                console.log("Puter SDK Ready. Finalizing Session UI...");
                 updateAuthUI();
-                await loadModels();
+                // FIX 1: loadModels triggered only when SDK is 100% available
+                loadModels();
             });
         } else {
-            console.error("Puter SDK failed to load");
+            // FALLBACK: Load local models even if SDK fails
+            loadModels();
+            console.error("CRITICAL: Puter.js SDK failed to load on this origin!");
         }
     };
   </script>
