@@ -26,6 +26,7 @@ import java.util.Map;
  * PERSISTENCE UPDATE: Added hardware-level cookie synchronization logic to prevent 
  * session loss during AI chat requests.
  * REFINED: Fixed Voice Mode leakage and Continuous Interruption logic.
+ * ENHANCEMENT: Added support for multi-session deletion via native bridge.
  */
 public class WebAppInterface {
 
@@ -206,6 +207,21 @@ public class WebAppInterface {
     @JavascriptInterface
     public String getChatSession(String sessionId) {
         return prefs.getString("session_" + sessionId, "[]");
+    }
+
+    /**
+     * REQUIREMENT #3: Delete a specific chat session from native storage.
+     * Updates SharedPreferences to remove the session key permanently.
+     */
+    @JavascriptInterface
+    public void deleteSession(String sessionId) {
+        if (sessionId != null) {
+            nativeLog("Bridge: Deleting session ID " + sessionId, "native");
+            // Standardizing the key to match the current saveChatSession implementation
+            prefs.edit().remove("session_" + sessionId).apply();
+            // Also ensure any web-side history keys are cleared if they were mirrored
+            prefs.edit().remove("puter_chat_history_" + sessionId).apply();
+        }
     }
 
     /**
