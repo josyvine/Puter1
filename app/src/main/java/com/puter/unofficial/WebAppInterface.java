@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.widget.Toast;
@@ -15,6 +16,7 @@ import android.util.Log;
 import android.webkit.CookieManager;
 
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * The core bridge class between the HTML JavaScript and Native Android code.
@@ -50,6 +52,9 @@ public class WebAppInterface {
                 if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
                     isTtsInitialized = true;
                     nativeLog("TTS Engine Initialized Successfully on Secure Origin", "native");
+                    
+                    // REQUIREMENT: Setup progress listener to handle continuous speech-to-mic loop
+                    setupTtsProgressListener();
                 } else {
                     nativeLog("TTS Language not supported", "error");
                 }
@@ -57,6 +62,28 @@ public class WebAppInterface {
                 nativeLog("TTS Initialization Failed", "error");
             }
         });
+    }
+
+    /**
+     * Setup listener to notify JavaScript when the AI finishes speaking.
+     */
+    private void setupTtsProgressListener() {
+        if (tts != null) {
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) {}
+
+                @Override
+                public void onDone(String utteranceId) {
+                    // Notify the web side that the AI is done talking
+                    // This allows the browser to re-open the mic for continuous conversation.
+                    webView.post(() -> webView.evaluateJavascript("if(window.onSpeechFinished){ window.onSpeechFinished(); }", null));
+                }
+
+                @Override
+                public void onError(String utteranceId) {}
+            });
+        }
     }
 
     /**
@@ -141,6 +168,42 @@ public class WebAppInterface {
     }
 
     // --- ENHANCED BRIDGE METHODS ---
+
+    /**
+     * Requirement #3: Save a specific chat session to native storage.
+     */
+    @JavascriptInterface
+    public void saveChatSession(String sessionId, String sessionData) {
+        prefs.edit().putString("session_" + sessionId, sessionData).apply();
+        nativeLog("Session " + sessionId + " persisted to native storage.", "native");
+    }
+
+    /**
+     * Requirement #3: Retrieve a specific chat session from native storage.
+     */
+    @JavascriptInterface
+    public String getChatSession(String sessionId) {
+        return prefs.getString("session_" + sessionId, "[]");
+    }
+
+    /**
+     * Requirement #3: Get all available session keys for the dropdown menu.
+     */
+    @JavascriptInterface
+    public String getAllSessions() {
+        Map<String, ?> allEntries = prefs.getAll();
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
+            if (entry.getKey().startsWith("session_")) {
+                if (!first) sb.append(",");
+                sb.append("\"").append(entry.getKey().replace("session_", "")).append("\"");
+                first = false;
+            }
+        }
+        sb.append("]");
+        return sb.toString();
+    }
 
     /**
      * Requirement #1: Copy to Clipboard helper.
