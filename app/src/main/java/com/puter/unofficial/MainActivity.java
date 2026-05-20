@@ -278,13 +278,32 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Overridden to intercept back button navigation dynamically.
+     * Prevents the app from closing when browsing an external page or when
+     * inside the sub-panels (browser.html, scraper.html).
+     */
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
+        if (webView != null) {
+            String currentUrl = webView.getUrl();
+            if (currentUrl != null) {
+                // 1. If viewing an external webpage inside the viewport, go back in browser history
+                if (!currentUrl.startsWith("https://appassets.androidplatform.net/")) {
+                    if (webView.canGoBack()) {
+                        webView.goBack();
+                        return;
+                    }
+                } 
+                // 2. If inside local sub-panels, smoothly route back to the central Puter Chat index.html
+                else if (currentUrl.contains("browser.html") || currentUrl.contains("scraper.html")) {
+                    webView.loadUrl(AppConstants.LOCAL_INDEX_URL);
+                    return;
+                }
+            }
         }
+        // 3. Default fallback if we are on index.html
+        super.onBackPressed();
     }
 
     @Override
