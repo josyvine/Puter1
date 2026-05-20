@@ -736,7 +736,8 @@
         const streamResp = await puter.ai.chat(finalPayload, {model: model, system_message: customInstruction, stream: true});
         
         let fullBotText = "";
-        const msgId = "msg-" + Date.now() + Math.random();
+        // FIX: Remove decimal points from ID to prevent querySelector syntax error
+        const msgId = "msg-" + Date.now() + "_" + Math.floor(Math.random() * 1000000);
         
         const log = document.getElementById('puterChatLog');
         const div = document.createElement('div');
@@ -803,7 +804,8 @@
     // 3. Append Chat with LONG PRESS & HISTORY Support
     function appendChat(sender, text, isLoad = false, files = []) {
       const log = document.getElementById('puterChatLog');
-      const msgId = Date.now() + Math.random();
+      // FIX: Remove decimal points from ID to prevent querySelector syntax error
+      const msgId = Date.now() + "_" + Math.floor(Math.random() * 1000000);
 
       const div = document.createElement('div');
       div.className = "message " + (sender === "User" ? "user-message" : "bot-message");
