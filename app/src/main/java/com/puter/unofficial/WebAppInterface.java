@@ -377,6 +377,8 @@ public class WebAppInterface {
      * Implements a new @JavascriptInterface method: saveImageToGallery(String base64Data).
      * This method strips the prefix, decodes Base64 to Bitmap, and saves it to the
      * public "Pictures/PuterAI" folder, handling Scoped Storage and showing Toast feedback.
+     * RESOLVED: The MediaStore collection URI selection has been modified to address crashes
+     * on custom Android distributions and older platforms by implementing runtime SDK checks.
      */
     @JavascriptInterface
     public void saveImageToGallery(String base64Data) {
@@ -426,7 +428,18 @@ public class WebAppInterface {
                     contentValues.put(MediaStore.MediaColumns.IS_PENDING, 1); // Indicate that we are writing
                 }
 
-                Uri collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+                // FIX: Fall back dynamically to handle custom ROM structures and pre-Q Android operating systems
+                Uri collection;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try {
+                        collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL);
+                    } catch (Exception e) {
+                        collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                    }
+                } else {
+                    collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                }
+
                 Uri imageUri = context.getContentResolver().insert(collection, contentValues);
 
                 if (imageUri == null) {
