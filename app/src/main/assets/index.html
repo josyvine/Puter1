@@ -24,7 +24,24 @@
     h2 { margin: 0; font-size: 1.3em; }
     .menu-button { cursor: pointer; font-size: 28px; padding: 5px; }
 
-    .dropdown { position: absolute; top: 60px; right: 10px; background: #fff; color: #333; border: 1px solid #ccc; z-index: 200; padding: 5px 0; display: none; width: 240px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); border-radius: 8px; }
+    /* FIX #3: SCROLLABLE THREE-DOT MENU */
+    .dropdown { 
+      position: absolute; 
+      top: 60px; 
+      right: 10px; 
+      background: #fff; 
+      color: #333; 
+      border: 1px solid #ccc; 
+      z-index: 200; 
+      padding: 5px 0; 
+      display: none; 
+      width: 240px; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2); 
+      border-radius: 8px; 
+      max-height: 75vh; 
+      overflow-y: auto; 
+      overscroll-behavior: contain; 
+    }
     .dropdown.show { display: block; }
     .dropdown li { list-style: none; margin: 0; cursor: pointer; padding: 12px 20px; border-bottom: 1px solid #f0f0f0; font-size: 16px; }
     .dropdown li:last-child { border-bottom: none; }
@@ -106,17 +123,23 @@
 
     .input-wrapper { display: flex; align-items: center; width: 100%; position: relative; }
 
-    .search-bar-container input[type="text"] { 
+    /* FIX #1: PROFESSIONAL TEXTAREA UPGRADE CSS */
+    .search-bar-container textarea { 
         flex-grow: 1; 
         border: none; 
         outline: none; 
-        padding: 0; 
+        padding: 10px 0; 
         font-size: 1.1em; 
         color: #202124; 
         background-color: transparent; 
         padding-left: 45px;   
         padding-right: 90px;  
         height: 44px; 
+        max-height: 180px; 
+        resize: none; 
+        overflow-y: hidden; 
+        line-height: 1.4; 
+        font-family: inherit;
     }
 
     /* Rules for all buttons in the bar */
@@ -206,11 +229,13 @@
       <li id="toggleSettingsBtn" onclick="toggleSettingsUI()">Hide Settings</li>
       <li onclick="openModal('helpModal')">Help</li>
       
-      <!-- NEW FEATURE: USAGE TELEMETRY IN MENU -->
+      <!-- FIX #2: UPDATED USAGE TELEMETRY UI -->
       <li id="usageDisplay" class="usage-divider">
         GENERATION USAGE
         <span class="usage-val" id="lastTokenVal">Last: 0 tokens</span>
         <span class="usage-val" id="lastCreditVal">Cost: $0.0000</span>
+        <span class="usage-val" id="totalTokenVal" style="margin-top: 8px; border-top: 1px solid rgba(26,115,232,0.2); padding-top: 4px;">Session Total: 0 tokens</span>
+        <span class="usage-val" id="totalCreditVal">Total Cost: $0.0000</span>
       </li>
 
       <!-- REQUIREMENT #3: DYNAMIC SESSION LIST INJECTED HERE -->
@@ -254,7 +279,8 @@
             <span class="material-symbols-outlined">add</span>
           </button>
 
-          <input type="text" id="puterChatInput" placeholder="Ask Puter..." oninput="handleInput()" autocomplete="off">
+          <!-- FIX #1: TEXTAREA REPLACEMENT -->
+          <textarea id="puterChatInput" placeholder="Ask Puter..." oninput="handleInput()" autocomplete="off" rows="1"></textarea>
 
           <!-- 2. Microphone: Right side, left of TTS -->
           <button class="action-button mic-btn-cls" onclick="triggerMic()">
@@ -401,15 +427,33 @@
     /* --- REQUIREMENT #1: FIXED VOICE LOGIC --- */
     let isVoiceResponseActive = false;
 
+    /* --- FIX #2: SESSION TOTAL VARIABLES --- */
+    let sessionTotalTokens = 0;
+    let sessionTotalCredits = 0;
+
     /* --- REQUIREMENT #3: MULTI-SESSION STATE --- */
     let currentSessionId = localStorage.getItem('puter_current_session_id') || Date.now().toString();
     let chatHistory = JSON.parse(localStorage.getItem('puter_chat_history_' + currentSessionId) || "[]");
     let activeMessageContext = null; 
 
+    /* FIX #1: AUTO-EXPANDING TEXTAREA LOGIC */
     function handleInput() {
       const input = document.getElementById('puterChatInput');
       const container = document.getElementById('puterSearchBarContainer');
-      // Updated visibility logic to check for text OR staged files
+      
+      // Auto-Expansion Logic
+      input.style.height = '44px'; // Reset to base height to calculate
+      const newHeight = Math.min(input.scrollHeight, 180);
+      input.style.height = newHeight + 'px';
+      
+      // Overflow toggle
+      if (input.scrollHeight > 180) {
+          input.style.overflowY = 'auto';
+      } else {
+          input.style.overflowY = 'hidden';
+      }
+
+      // Visibility logic to check for text OR staged files
       if (input.value.trim().length > 0 || stagedFiles.length > 0) {
         container.classList.add('has-text');
       } else {
@@ -672,15 +716,23 @@
         }
     }
 
-    /* --- NEW FEATURE: UPDATE USAGE DATA IN DROPDOWN --- */
+    /* --- FIX #2: UPDATED CUMULATIVE TELEMETRY LOGIC --- */
     function updateUsageUI(usage) {
         if(!usage) return;
         const totalTokens = usage.total_tokens || (usage.prompt_tokens + usage.completion_tokens) || 0;
-        const totalCredits = usage.usd_cents ? (usage.usd_cents / 100).toFixed(4) : "0.0000";
+        const totalCredits = usage.usd_cents ? (usage.usd_cents / 100) : 0;
+
+        // Accumulate
+        sessionTotalTokens += totalTokens;
+        sessionTotalCredits += totalCredits;
 
         document.getElementById('lastTokenVal').textContent = `Last: ${totalTokens} tokens`;
-        document.getElementById('lastCreditVal').textContent = `Cost: $${totalCredits}`;
-        console.log(`TELEMETRY: ${totalTokens} tokens used.`);
+        document.getElementById('lastCreditVal').textContent = `Cost: $${totalCredits.toFixed(4)}`;
+
+        document.getElementById('totalTokenVal').textContent = `Session Total: ${sessionTotalTokens} tokens`;
+        document.getElementById('totalCreditVal').textContent = `Total Cost: $${sessionTotalCredits.toFixed(4)}`;
+
+        console.log(`TELEMETRY: ${totalTokens} tokens used. Session Total: ${sessionTotalTokens}`);
     }
 
     // 2. Main Chat Logic with ECG LOADER & MULTI-FILE PAYLOAD
@@ -1155,6 +1207,12 @@
       // Create a new ID and reset UI without deleting data
       currentSessionId = Date.now().toString();
       localStorage.setItem('puter_current_session_id', currentSessionId);
+
+      /* RESET USAGE TOTALS FOR NEW SESSION */
+      sessionTotalTokens = 0;
+      sessionTotalCredits = 0;
+      document.getElementById('totalTokenVal').textContent = `Session Total: 0 tokens`;
+      document.getElementById('totalCreditVal').textContent = `Total Cost: $0.0000`;
 
       document.getElementById('puterChatLog').innerHTML = '';
       chatHistory = [];
