@@ -252,6 +252,10 @@
       <li id="toggleSettingsBtn" onclick="toggleSettingsUI()">Hide Settings</li>
       <li onclick="openModal('helpModal')">Help</li>
       
+      <!-- NEW BROWSER TAB TRANSITION TRIGGERS -->
+      <li onclick="window.AndroidInterface.loadLocalUrl('browser.html')">Browse Website</li>
+      <li onclick="window.AndroidInterface.loadLocalUrl('scraper.html')">Open Web Scraper</li>
+      
       <!-- FIX #2: PERSISTENT USAGE TELEMETRY UI -->
       <li id="usageDisplay" class="usage-divider">
         GENERATION USAGE
@@ -263,6 +267,9 @@
 
       <!-- REQUIREMENT #3: DYNAMIC SESSION LIST INJECTED HERE -->
       <div id="dynamicSessions"></div>
+      
+      <!-- NEW "WEB SCRAP" SUB-SECTION DYNAMICALLY INJECTED HERE -->
+      <div id="dynamicScrapedItems"></div>
     </ul>
   </header>
 
@@ -514,6 +521,7 @@
     document.getElementById('puterMenuButton').onclick = (e) => {
       e.stopPropagation();
       renderDynamicSessionList(); 
+      renderDynamicScrapedList(); // NEW: Pulls and displays newly indexed crawled files
       document.getElementById('puterDropdownMenu').classList.toggle('show');
     };
 
@@ -1175,6 +1183,105 @@
             li.onclick = () => loadSession(id);
             container.appendChild(li);
         });
+    }
+
+    /**
+     * NEW SYSTEM FUNCTION: Dynamic scraped document index render loop.
+     * Renders clean e-commerce metadata tables or universal articles directly
+     * into the three-dot menu dropdown list, featuring long-press native deletion triggers.
+     */
+    function renderDynamicScrapedList() {
+        const container = document.getElementById('dynamicScrapedItems');
+        if (!container) return;
+
+        if (!window.AndroidInterface || !window.AndroidInterface.getScrapedProducts) {
+            container.innerHTML = '';
+            return;
+        }
+
+        try {
+            const rawData = window.AndroidInterface.getScrapedProducts();
+            const scrapedList = JSON.parse(rawData || "[]");
+
+            let html = '<li class="session-divider">Web Scrap (Long-press to delete)</li>';
+            container.innerHTML = html;
+
+            if (scrapedList.length === 0) {
+                const emptyLi = document.createElement('li');
+                emptyLi.style.color = '#999';
+                emptyLi.style.fontSize = '12px';
+                emptyLi.style.padding = '10px 20px';
+                emptyLi.textContent = 'No scraped items available';
+                container.appendChild(emptyLi);
+                return;
+            }
+
+            scrapedList.forEach(item => {
+                const li = document.createElement('li');
+                li.style.display = 'flex';
+                li.style.flexDirection = 'column';
+                li.style.padding = '10px 20px';
+
+                const isUniversal = (item.type === "universal_web");
+                const label = isUniversal 
+                    ? (item.metadata.title || item.scraped_id) 
+                    : `ASIN: ${item.specifications.asin || item.scraped_id}`;
+                const subLabel = isUniversal 
+                    ? "[Universal Article] " + (item.metadata.url || "").substring(0, 30) + "..."
+                    : `[Amazon Spec] ${item.specifications.brand || "N/A"} - ${item.specifications.model || "N/A"}`;
+
+                li.innerHTML = `
+                    <span style="font-weight: bold; font-size: 13px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${label}</span>
+                    <span style="font-size: 11px; color: #1a73e8; margin-top: 2px;">${subLabel}</span>
+                `;
+
+                // Pointer-based long-press deletion handler
+                let scrapPressTimer;
+                li.onpointerdown = (e) => {
+                    scrapPressTimer = window.setTimeout(() => {
+                        if (confirm(`Are you sure you want to permanently delete this scraped item: ${label}?`)) {
+                            if (window.AndroidInterface && window.AndroidInterface.deleteSession) {
+                                window.AndroidInterface.deleteSession(item.scraped_id);
+                            }
+                            renderDynamicScrapedList();
+                        }
+                    }, 800);
+                };
+                li.onpointerup = () => clearTimeout(scrapPressTimer);
+                li.onpointercancel = () => clearTimeout(scrapPressTimer);
+
+                li.onclick = (e) => {
+                    // Stop regular click trigger if long press fires
+                    clearTimeout(scrapPressTimer);
+                    
+                    let prompt = "";
+                    if (isUniversal) {
+                        prompt = `Please analyze, summarize, and extract key insights from the following universal web document:\n\nTitle: ${item.metadata.title}\nURL: ${item.metadata.url}\nTimestamp: ${item.metadata.timestamp}\n\nContent:\n${item.content}`;
+                    } else {
+                        let tableText = "| Attribute | Value |\n| --- | --- |\n";
+                        for (const key in item.specifications) {
+                            if (key !== "scraped_id") {
+                                tableText += `| ${key} | ${item.specifications[key]} |\n`;
+                            }
+                        }
+                        prompt = `Please analyze the specifications for this Amazon product, explain the key technical attributes, and summarize its competitive advantages:\n\nCategory: ${item.hierarchy.main_category} > ${item.hierarchy.sub_category}\n\nProduct Specifications Table:\n${tableText}`;
+                    }
+
+                    // Inject prompt, expand the input bar, and auto-focus
+                    const input = document.getElementById('puterChatInput');
+                    input.value = prompt;
+                    handleInput();
+                    input.focus();
+                    
+                    // Close menu dropdown
+                    document.getElementById('puterDropdownMenu').classList.remove('show');
+                };
+
+                container.appendChild(li);
+            });
+        } catch (err) {
+            console.error("Error rendering scraped list:", err);
+        }
     }
 
     function loadSession(id) {
