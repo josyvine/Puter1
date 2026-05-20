@@ -616,6 +616,19 @@ public class WebAppInterface {
     }
 
     /**
+     * NEW INTERFACE METHOD: showToast(String message)
+     * Spawns a high-visibility native Android Toast on the UI thread for instant scraper progress feedback.
+     */
+    @JavascriptInterface
+    public void showToast(final String message) {
+        if (message == null) return;
+        nativeLog("Bridge: Triggering Native Toast -> " + message, "native");
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show();
+        });
+    }
+
+    /**
      * Cleanup resources when the Activity is destroyed.
      */
     public void destroy() {
