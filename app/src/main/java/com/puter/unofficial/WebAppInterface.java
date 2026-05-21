@@ -68,7 +68,7 @@ public class WebAppInterface {
                 if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
                     isTtsInitialized = true;
                     nativeLog("TTS Engine Initialized Successfully on Secure Origin", "native");
-                    
+
                     // REQUIREMENT: Setup progress listener to handle continuous speech-to-mic loop
                     setupTtsProgressListener();
                 } else {
@@ -259,7 +259,7 @@ public class WebAppInterface {
                     prefs.edit().putString(AppConstants.KEY_SCRAPED_PRODUCTS_INDEX, newArray.toString()).apply();
                     nativeLog("Deleted scraped item [" + sessionId + "] from device storage.", "native");
                 } catch (Exception e) {
-                    Log.e("WebAppInterface", "Error updating scraped index on delete", e);
+                    Log.e("WebAppInterface", "Error updating scraped index list", e);
                 }
             }
         }
@@ -337,12 +337,12 @@ public class WebAppInterface {
     public void onAuthStatusChanged(boolean isSignedIn) {
         nativeLog("Syncing Auth Status: " + (isSignedIn ? "AUTHENTICATED" : "NOT_AUTHENT_AUTHENTICATED"), "native");
         AuthManager.getInstance(context).setLoggedIn(isSignedIn);
-        
+
         // PERSISTENCE FIX: Force the browser engine to commit cookies to disk.
         // This solves the bug where signing in works but requests immediately fail.
         android.webkit.CookieManager.getInstance().flush();
     }
-    
+
     /**
      * Returns the auth token saved in native storage.
      * DEPRECATED: Under HTTPS origin, the SDK manages its own storage natively.
@@ -396,6 +396,12 @@ public class WebAppInterface {
             }
         } catch (Exception e) {
             Log.e("WebAppInterface", "Error updating scraped index list", e);
+        }
+
+        // DUAL-SCRAPER NATIVE STATE FEEDBACK LOOP: 
+        // Notify MainActivity upon successfully writing the parsed product so it can transition native FAB colors and dismiss active watchdog timers
+        if (context instanceof MainActivity) {
+            ((MainActivity) context).onScrapeSuccess(id);
         }
     }
 
@@ -494,7 +500,7 @@ public class WebAppInterface {
         nativeLog("Processing Global Sign-Out Request...", "native");
         prefs.edit().remove("puter_auth_token").apply();
         AuthManager.getInstance(context).logout();
-        
+
         // PERSISTENCE FIX: Wiping session markers from hardware immediately.
         android.webkit.CookieManager.getInstance().flush();
 
@@ -563,7 +569,7 @@ public class WebAppInterface {
                 // 3. Use the ContentValues and MediaStore.Images.Media API to save the bitmap
                 //    into the public "Pictures/PuterAI" folder.
                 String fileName = "PuterAI_Image_" + new Date().getTime() + (mimeType.equals("image/jpeg") ? ".jpg" : ".png");
-                
+
                 ContentValues contentValues = new ContentValues();
                 contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
                 contentValues.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
