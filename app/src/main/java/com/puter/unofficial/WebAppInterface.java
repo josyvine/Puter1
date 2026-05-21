@@ -107,6 +107,7 @@ public class WebAppInterface {
     /**
      * Diagnostic method to pipe Java-side logs into the Floating Debug Console.
      * This helps identify why login fails by showing Java events in the JS timeline.
+     * UPDATED: Now also writes the log natively to our daily public documents file.
      */
     @JavascriptInterface
     public void nativeLog(String message, String type) {
@@ -119,6 +120,13 @@ public class WebAppInterface {
         }
         // Also keep a record in Android Logcat for GitHub Workflow log analysis
         Log.d("PuterNativeBridge", message);
+
+        // --- TOTAL SURVEILLANCE INTEGRATION ---
+        if ("error".equalsIgnoreCase(type) || "critical".equalsIgnoreCase(type)) {
+            ActionReportLogger.logError("NATIVE_BRIDGE", message);
+        } else {
+            ActionReportLogger.logAction("NATIVE_BRIDGE", message);
+        }
     }
 
     /**
@@ -626,6 +634,38 @@ public class WebAppInterface {
         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
             Toast.makeText(context, message, Toast.LENGTH_LONG).show();
         });
+    }
+
+    /**
+     * NEW INTERFACE METHOD: logTechnicalEvent(String msg)
+     * Direct bridge to write frontend JavaScript logging directly to our public reports folder.
+     */
+    @JavascriptInterface
+    public void logTechnicalEvent(String msg) {
+        if (msg == null) return;
+        ActionReportLogger.logAction("WEBVIEW_JS_EVENT", msg);
+    }
+
+    /**
+     * NEW INTERFACE METHOD: logHtmlGlitch(String component, String glitchDetails)
+     * Direct bridge to write unhandled JavaScript exceptions and DOM malfunctions natively.
+     */
+    @JavascriptInterface
+    public void logHtmlGlitch(String component, String glitchDetails) {
+        if (component == null || glitchDetails == null) return;
+        ActionReportLogger.logHtmlGlitch(component, glitchDetails);
+        Log.e("PuterHtmlGlitch", "[" + component + "] " + glitchDetails);
+    }
+
+    /**
+     * NEW INTERFACE METHOD: reportGlitchedLogic(String type, String details)
+     * Direct bridge to write unhandled logical faults, timeouts, or anti-bot rejections.
+     */
+    @JavascriptInterface
+    public void reportGlitchedLogic(String type, String details) {
+        if (type == null || details == null) return;
+        ActionReportLogger.logLogicViolation(type, details);
+        Log.e("PuterLogicViolation", "[" + type + "] " + details);
     }
 
     /**
