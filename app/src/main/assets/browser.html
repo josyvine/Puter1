@@ -438,12 +438,21 @@
             }, 8000);
 
             const iframe = document.getElementById('browserViewport');
+            
+            // Same-origin check to prevent postMessage mismatches on cross-origin boundaries
+            let sameOrigin = false;
             try {
-                // If same origin, execute script directly
+                if (iframe.contentDocument || iframe.contentWindow.document) {
+                    sameOrigin = true;
+                }
+            } catch (originError) {
+                sameOrigin = false;
+            }
+
+            if (sameOrigin) {
                 iframe.contentWindow.postMessage({ action: "scrape_universal" }, "*");
-            } catch (e) {
-                // For cross-origin pages, WebViewClient automatically injects universal_scraper.js onPageFinished.
-                // We send a programmatic postMessage to trigger the save.
+            } else {
+                // Cross-origin fallback sends the standard 'scrape' string command directly
                 iframe.contentWindow.postMessage("scrape", "*");
             }
         }
