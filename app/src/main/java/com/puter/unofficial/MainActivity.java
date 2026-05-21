@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -58,6 +60,10 @@ public class MainActivity extends AppCompatActivity {
     private Button btnBrowserForward;
     private Button btnBrowserReload;
     private FloatingActionButton fabScrape;
+
+    // Background handler for managing native scraping timers and watchdogs
+    private final android.os.Handler scrapeHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable scrapeTimeoutRunnable;
 
     // Receiver to catch results from the Full-Screen Voice Agent Activity
     private BroadcastReceiver voiceReceiver;
@@ -135,13 +141,8 @@ public class MainActivity extends AppCompatActivity {
             return false;
         });
 
-        // Handle clicking the Native Scraping FAB by evaluating a top-level postMessage directly
-        fabScrape.setOnClickListener(v -> {
-            if (webView != null) {
-                // Post the 'scrape' command directly to our injected script on the active top-level webpage origin
-                webView.evaluateJavascript("window.postMessage('scrape', '*');", null);
-            }
-        });
+        // Handle clicking the Native Scraping FAB by implementing native color state timers and redirects
+        fabScrape.setOnClickListener(v -> startScrapeSequence());
 
         // DIAGNOSTICS: Enable Remote Debugging via Chrome DevTools (pc)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
@@ -214,6 +215,73 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * Executes the native scraping sequence including Amazon redirects, Same-Origin
+     * evaluations, and background color state handler timers.
+     */
+    private void startScrapeSequence() {
+        if (webView == null) return;
+
+        String activeUrl = webView.getUrl();
+        if (activeUrl == null || activeUrl.startsWith("about:blank") || activeUrl.startsWith(AppConstants.LOCAL_INDEX_URL)) {
+            Toast.makeText(this, "Navigate to a webpage first before scraping.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (activeUrl.contains("amazon.in") || activeUrl.contains("amazon.com")) {
+            // E-Commerce Route: Redirect the WebView context directly to scraper.html
+            Log.d("MainActivity", "Native Scraper: Navigating directly to local scraper.html for Amazon product.");
+            webView.loadUrl(AppConstants.LOCAL_SCRAPER_URL);
+        } else {
+            // Universal Mode: Trigger the scraper and manage color state transitions natively
+            scrapeHandler.removeCallbacksAndMessages(null); // Cancel any lingering progress timers
+
+            // 1. Transition instantly to Scraping state (RED)
+            fabScrape.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#D93025")));
+
+            // 2. Set timeout to transition to intermediate Processing state (ORANGE) after 1.2 seconds
+            scrapeHandler.postDelayed(() -> {
+                fabScrape.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#F2994A")));
+            }, 1200);
+
+            // 3. START DIAGNOSTIC WATCHDOG TIMER (8-seconds limit)
+            scrapeTimeoutRunnable = () -> {
+                fabScrape.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#D93025"))); // Revert to RED indicating failure
+                Toast.makeText(MainActivity.this, "Scraping failed: Iframe or Script Timeout.", Toast.LENGTH_LONG).show();
+
+                // Smoothly return back to original Blue state after 4 seconds
+                scrapeHandler.postDelayed(() -> {
+                    fabScrape.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#1A73E8")));
+                }, 4000);
+            };
+            scrapeHandler.postDelayed(scrapeTimeoutRunnable, 8000);
+
+            // Evaluate standard postMessage to trigger the injected script inside the current same-origin main window context
+            webView.evaluateJavascript("window.postMessage('scrape', '*');", null);
+        }
+    }
+
+    /**
+     * Public success callback invoked by WebAppInterface upon successful parsing inside addScrapedProduct.
+     */
+    public void onScrapeSuccess(String scrapedId) {
+        runOnUiThread(() -> {
+            // Clear active progress and watchdog timers immediately
+            scrapeHandler.removeCallbacksAndMessages(null);
+
+            // Transition to Finished state (GREEN) on success callback
+            fabScrape.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#27AE60")));
+
+            // Trigger native Toast message feedback
+            Toast.makeText(MainActivity.this, "JSON sent successfully to Puter Unofficial", Toast.LENGTH_LONG).show();
+
+            // Smoothly revert back to original Blue state after 4 seconds
+            scrapeHandler.postDelayed(() -> {
+                fabScrape.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#1A73E8")));
+            }, 4000);
+        });
+    }
+
+    /**
      * Toggles visibility of the Native browser control toolbar and the Scraping FAB.
      * Triggered automatically by the WebViewClient during page transitions.
      */
@@ -221,8 +289,8 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(() -> {
             if (url == null) return;
 
-            if (url.startsWith(AppConstants.LOCAL_INDEX_URL)) {
-                // If on local index home page, hide native browser controls
+            // Hide native controls if loading ANY local web assets or the main index page
+            if (url.startsWith(AppConstants.LOCAL_INDEX_URL) || url.contains("browser.html") || url.contains("scraper.html")) {
                 browserToolbar.setVisibility(View.GONE);
                 fabScrape.setVisibility(View.GONE);
             } else {
@@ -446,6 +514,7 @@ public class MainActivity extends AppCompatActivity {
         if (webAppInterface != null) {
             webAppInterface.destroy();
         }
+        scrapeHandler.removeCallbacksAndMessages(null); // Purge any remaining scraper handshakes
         super.onDestroy();
     }
 }
