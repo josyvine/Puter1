@@ -253,7 +253,8 @@
 
   <div class="viewport-container">
     <!-- Viewport rendering iframe -->
-    <iframe id="browserViewport" name="browserViewport" src="about:blank" onload="onViewportLoad()"></iframe>
+    <!-- CORE FIX: Inline onload hook removed to prevent parsing-order ReferenceError loops -->
+    <iframe id="browserViewport" name="browserViewport" src="about:blank"></iframe>
 
     <!-- Initial Landing Placeholder -->
     <div class="browser-placeholder" id="browserPlaceholder">
@@ -478,6 +479,9 @@
             }
         }
     });
+
+    // CORE FIX: Bind the iframe onload event listener dynamically to bypass DOM parsing race conditions
+    document.getElementById('browserViewport').addEventListener('load', onViewportLoad);
   </script>
 </body>
 </html>
