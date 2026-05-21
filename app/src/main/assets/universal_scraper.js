@@ -6,7 +6,7 @@
  */
 
 (function() {
-    
+
     /**
      * CLEANING UTILITY
      * Collapses duplicate whitespace blocks, strips invisible marks, and normalizes linebreaks.
@@ -27,7 +27,7 @@
     function extractArticleParagraphs() {
         const url = window.location.href;
         const timestamp = new Date().toISOString();
-        
+
         // 1. Isolate Page Title
         let rawTitle = document.title;
         const ogTitle = document.querySelector('meta[property="og:title"]');
@@ -79,10 +79,10 @@
             }
 
             let score = parseFloat(parent.getAttribute('data-heuristics-score'));
-            
+
             // Add score points scaled to text character count
             score += Math.min(paragraphText.length / 50, 10); 
-            
+
             parent.setAttribute('data-heuristics-score', score.toString());
         });
 
@@ -92,7 +92,7 @@
 
         candidateContainers.forEach(container => {
             let score = parseFloat(container.getAttribute('data-heuristics-score'));
-            
+
             // Calculate total non-link text vs hyperlink markups
             const linkText = Array.from(container.querySelectorAll('a'))
                 .map(a => a.innerText.trim())
@@ -115,13 +115,13 @@
 
         // 6. Format Content into Paragraph Output
         let finalCleanText = "";
-        
+
         if (winningContainer && highestScore > 4) {
             // Read child tags inside winning container (paragraphs and secondary headings)
             const contentNodes = Array.from(winningContainer.querySelectorAll('p, h2, h3'))
                 .map(node => node.innerText.replace(/\s+/g, ' ').trim())
                 .filter(text => text.length > 20);
-            
+
             finalCleanText = contentNodes.join('\n\n');
         } else {
             // Universal Fallback: Gathers all low-link-density paragraphs from the body clone directly
@@ -133,13 +133,13 @@
                     return (linksVal.length / textVal.length) < 0.25;
                 })
                 .map(p => p.innerText.replace(/\s+/g, ' ').trim());
-            
+
             finalCleanText = fallbackParagraphs.join('\n\n');
         }
 
         // 7. Structured JSON Assembly
         const scrapedId = "web_" + Date.now() + "_" + cleanTitle.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 24);
-        
+
         return {
             "type": "universal_web",
             "scraped_id": scrapedId,
@@ -157,22 +157,46 @@
      * Resolves payload delivery immediately based on runtime environment:
      * - Route 1: Dispatches straight to window.AndroidInterface native storage.
      * - Route 2: Performs window.parent.postMessage callback to browser.html as fallback.
+     * ENHANCED: Includes try-catch wrapping and direct native logic exception logging.
      */
     function triggerScrapeCallback() {
         console.log("universal_scraper.js: Parsing core body content...");
-        const payload = extractArticleParagraphs();
+        
+        try {
+            const payload = extractArticleParagraphs();
 
-        // 1. Direct Web-to-Native Bridge Handoff
-        if (window.AndroidInterface && window.AndroidInterface.addScrapedProduct) {
-            window.AndroidInterface.addScrapedProduct(payload.scraped_id, JSON.stringify(payload));
-        }
+            // 1. Direct Web-to-Native Bridge Handoff
+            if (window.AndroidInterface && window.AndroidInterface.addScrapedProduct) {
+                window.AndroidInterface.addScrapedProduct(payload.scraped_id, JSON.stringify(payload));
+            }
 
-        // 2. Parent Container postMessage Handoff
-        if (window.parent && window.parent !== window) {
-            window.parent.postMessage({
-                type: "scraped_data_callback",
-                payload: payload
-            }, "*");
+            // 2. Parent Container postMessage Handoff
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: "scraped_data_callback",
+                    payload: payload
+                }, "*");
+            }
+        } catch (error) {
+            // FORENSIC SYSTEM: Intercept unhandled JS exceptions and pipe directly to native public logs
+            console.error("universal_scraper.js: Parsing crashed!", error);
+
+            if (window.AndroidInterface) {
+                if (window.AndroidInterface.logHtmlGlitch) {
+                    window.AndroidInterface.logHtmlGlitch("universal_scraper.js", "Exception caught during parsing:\n" + (error.stack || error.message));
+                }
+                if (window.AndroidInterface.reportGlitchedLogic) {
+                    window.AndroidInterface.reportGlitchedLogic("SCRAP_FAILURE", "JavaScript extraction engine exception: " + error.message);
+                }
+            }
+
+            // Also post message back to parent browser.html frame to immediately break the infinite orange hang
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: "scraped_data_error",
+                    error: error.message
+                }, "*");
+            }
         }
     }
 
