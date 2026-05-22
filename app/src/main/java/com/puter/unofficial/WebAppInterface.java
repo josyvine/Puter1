@@ -403,6 +403,20 @@ public class WebAppInterface {
         return obj.toString();
     }
 
+    /**
+     * NEW: Settings save interface.
+     * Persists the public extension key and active relay URL received from browser.html
+     * directly into native SharedPreferences.
+     */
+    @JavascriptInterface
+    public void saveNostrSettings(String publicKey, String relayUrl) {
+        nativeLog("Bridge: Persisting Nostr settings - Key: " + publicKey + ", Relay: " + relayUrl, "native");
+        prefs.edit()
+             .putString(AppConstants.KEY_EXTENSION_PUBLIC_ID, publicKey)
+             .putString(AppConstants.KEY_NOSTR_RELAY_URL, relayUrl)
+             .apply();
+    }
+
     // --- NEW WEB SCRAPER ENGINE INTERFACES ---
 
     /**
